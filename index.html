@@ -86,10 +86,12 @@
 
     <!-- Header -->
     <header class="flex-none h-16 border-b border-gray-800 bg-gray-900/50 backdrop-blur-md flex items-center justify-between px-4 sm:px-6 z-10">
-        <div class="flex items-center gap-3">
-            <div class="w-10 h-10 rounded-xl bg-gradient-to-tr from-blue-600 to-indigo-500 flex items-center justify-center shadow-lg shadow-blue-900/20">
-                <i data-lucide="sparkles" class="text-white w-6 h-6"></i>
+        <div class="flex items-center gap-4">
+            <!-- AI Eyes Container -->
+            <div class="relative w-16 h-10 bg-black/50 rounded-lg border border-blue-900/30 flex items-center justify-center overflow-hidden shadow-[0_0_10px_rgba(59,130,246,0.1)]">
+                <canvas id="eye-canvas" width="64" height="40" class="w-full h-full"></canvas>
             </div>
+            
             <div>
                 <h1 class="font-bold text-lg tracking-tight text-white">Gemini Assistant</h1>
                 <p class="text-xs text-gray-400 font-medium flex items-center gap-1.5">
@@ -116,7 +118,7 @@
                     <span class="text-xs text-gray-500">Just now</span>
                 </div>
                 <div class="prose text-gray-300 text-sm leading-relaxed bg-gray-900 border border-gray-800 rounded-2xl rounded-tl-none px-5 py-3 shadow-sm w-fit">
-                    <p>Hello! I am your AI assistant. How can I help you today?</p>
+                    <p>Hello! I am your AI assistant. I can see you moving your cursor! How can I help?</p>
                 </div>
             </div>
         </div>
@@ -166,6 +168,149 @@
         // State
         let isGenerating = false;
         let chatHistory = []; // Stores { role: 'user' | 'model', text: string }
+
+        // --- Eye Animation Logic ---
+        class EyeController {
+            constructor(canvasId) {
+                this.canvas = document.getElementById(canvasId);
+                this.ctx = this.canvas.getContext('2d');
+                
+                // Eye State
+                this.eyeX = 0;
+                this.eyeY = 0;
+                this.blinkScale = 1;
+                this.isThinking = false;
+                this.thinkingPhase = 0;
+                
+                // Mouse Tracking Targets
+                this.targetX = 0;
+                this.targetY = 0;
+                
+                // Bind Events
+                window.addEventListener('mousemove', this.handleMouseMove.bind(this));
+                window.addEventListener('resize', this.handleResize.bind(this));
+                
+                // Start Loops
+                this.rect = this.canvas.getBoundingClientRect();
+                this.startBlinkLoop();
+                this.animate();
+            }
+            
+            handleResize() {
+                this.rect = this.canvas.getBoundingClientRect();
+            }
+
+            handleMouseMove(e) {
+                // Recalculate rect occasionally in case of scroll/layout change
+                this.rect = this.canvas.getBoundingClientRect();
+                
+                const centerX = this.rect.left + this.rect.width / 2;
+                const centerY = this.rect.top + this.rect.height / 2;
+                
+                const maxOffset = 8; // Max pixels eyes move from center
+                const dx = e.clientX - centerX;
+                const dy = e.clientY - centerY;
+                
+                // Calculate angle and distance
+                const angle = Math.atan2(dy, dx);
+                // Dampen distance so eyes don't go crazy
+                const distance = Math.min(Math.sqrt(dx*dx + dy*dy), 500); 
+                const scale = distance / 500; 
+                
+                this.targetX = Math.cos(angle) * maxOffset * scale;
+                this.targetY = Math.sin(angle) * maxOffset * scale;
+            }
+
+            setThinking(thinking) {
+                this.isThinking = thinking;
+            }
+
+            startBlinkLoop() {
+                const blink = () => {
+                    if (this.isThinking) {
+                        setTimeout(blink, 1000); 
+                        return;
+                    }
+
+                    let startTime = Date.now();
+                    const duration = 150;
+                    
+                    const animateBlink = () => {
+                        const elapsed = Date.now() - startTime;
+                        if (elapsed < duration) {
+                            // Sine wave for smooth 1 -> 0.1 -> 1
+                            const progress = elapsed / duration;
+                            const deviation = Math.sin(progress * Math.PI);
+                            this.blinkScale = 1 - (deviation * 0.95);
+                            requestAnimationFrame(animateBlink);
+                        } else {
+                            this.blinkScale = 1;
+                        }
+                    };
+                    animateBlink();
+                    
+                    // Random blink interval between 2s and 6s
+                    setTimeout(blink, Math.random() * 4000 + 2000);
+                };
+                setTimeout(blink, 2000);
+            }
+
+            drawEye(x, y, width, height) {
+                const h = height * this.blinkScale;
+                
+                // Glow Effect
+                this.ctx.shadowBlur = 15;
+                this.ctx.shadowColor = '#3b82f6'; // Tailwind blue-500
+                this.ctx.fillStyle = '#60a5fa';   // Tailwind blue-400
+                
+                this.ctx.beginPath();
+                if (this.ctx.roundRect) {
+                    this.ctx.roundRect(x - width/2, y - h/2, width, h, width/2);
+                } else {
+                    // Fallback for older browsers
+                    this.ctx.ellipse(x, y, width/2, h/2, 0, 0, Math.PI * 2);
+                }
+                this.ctx.fill();
+                
+                // Reset Shadow for performance/cleanliness if needed
+                this.ctx.shadowBlur = 0;
+            }
+
+            animate() {
+                this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
+                
+                if (this.isThinking) {
+                    // Thinking Animation: Squint and Vibrate
+                    this.thinkingPhase += 0.2;
+                    this.blinkScale = 0.6 + Math.sin(this.thinkingPhase) * 0.1; // Squint
+                    
+                    // Vibrate
+                    this.eyeX = (Math.random() - 0.5) * 2;
+                    this.eyeY = (Math.random() - 0.5) * 2;
+                } else {
+                    // Smooth Look Tracking (Linear Interpolation)
+                    this.eyeX += (this.targetX - this.eyeX) * 0.15;
+                    this.eyeY += (this.targetY - this.eyeY) * 0.15;
+                }
+
+                // Draw Eyes
+                const centerX = this.canvas.width / 2;
+                const centerY = this.canvas.height / 2;
+                const eyeSpacing = 16;
+                const eyeWidth = 10;
+                const eyeHeight = 22;
+
+                this.drawEye(centerX - eyeSpacing + this.eyeX, centerY + this.eyeY, eyeWidth, eyeHeight);
+                this.drawEye(centerX + eyeSpacing + this.eyeX, centerY + this.eyeY, eyeWidth, eyeHeight);
+
+                requestAnimationFrame(() => this.animate());
+            }
+        }
+
+        // Init Eyes
+        const eyes = new EyeController('eye-canvas');
+
+        // --- End Eye Animation Logic ---
 
         // Auto-resize textarea
         userInput.addEventListener('input', function() {
@@ -262,6 +407,7 @@
 
             // 1. UI: Set State
             isGenerating = true;
+            eyes.setThinking(true); // EYES THINKING
             userInput.value = '';
             userInput.style.height = 'auto';
             userInput.disabled = true;
@@ -278,9 +424,6 @@
 
             try {
                 // 5. DATA: Prepare Prompt with History
-                // Construct a dialogue history to send to the stateless worker.
-                // We use a simple "User: / Gemini:" format.
-                // Limit to last 20 messages to avoid hitting token limits too quickly.
                 const promptWithHistory = chatHistory
                     .slice(-20)
                     .map(msg => `${msg.role === 'user' ? 'User' : 'Gemini'}: ${msg.text}`)
@@ -309,10 +452,10 @@
                 console.error('Error:', error);
                 removeThinking();
                 appendMessage('model', "**Error:** Could not connect to the AI service. Please try again.");
-                // Note: We do not push error messages to chatHistory to avoid polluting context.
             } finally {
                 // 9. Reset UI State
                 isGenerating = false;
+                eyes.setThinking(false); // EYES NORMAL
                 userInput.disabled = false;
                 sendBtn.disabled = false;
                 userInput.focus();
