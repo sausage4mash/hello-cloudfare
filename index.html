@@ -165,6 +165,7 @@
 
         // State
         let isGenerating = false;
+        let chatHistory = []; // Stores { role: 'user' | 'model', text: string }
 
         // Auto-resize textarea
         userInput.addEventListener('input', function() {
@@ -269,31 +270,48 @@
             // 2. UI: Add User Message
             appendMessage('user', text);
 
-            // 3. UI: Add Thinking Indicator
+            // 3. DATA: Update History with User Message
+            chatHistory.push({ role: 'user', text: text });
+
+            // 4. UI: Add Thinking Indicator
             appendMessage('model', '', true);
 
             try {
-                // 4. API: Call Worker
+                // 5. DATA: Prepare Prompt with History
+                // Construct a dialogue history to send to the stateless worker.
+                // We use a simple "User: / Gemini:" format.
+                // Limit to last 20 messages to avoid hitting token limits too quickly.
+                const promptWithHistory = chatHistory
+                    .slice(-20)
+                    .map(msg => `${msg.role === 'user' ? 'User' : 'Gemini'}: ${msg.text}`)
+                    .join('\n');
+
+                // 6. API: Call Worker
                 const response = await fetch(WORKER_URL, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ prompt: text })
+                    body: JSON.stringify({ prompt: promptWithHistory })
                 });
 
                 if (!response.ok) throw new Error('Worker responded with error');
 
                 const data = await response.json();
+                const replyText = data.reply || "No response received.";
                 
-                // 5. UI: Update with Real Response
+                // 7. UI: Update with Real Response
                 removeThinking();
-                appendMessage('model', data.reply || "No response received.");
+                appendMessage('model', replyText);
+
+                // 8. DATA: Update History with Model Response
+                chatHistory.push({ role: 'model', text: replyText });
 
             } catch (error) {
                 console.error('Error:', error);
                 removeThinking();
                 appendMessage('model', "**Error:** Could not connect to the AI service. Please try again.");
+                // Note: We do not push error messages to chatHistory to avoid polluting context.
             } finally {
-                // 6. Reset UI State
+                // 9. Reset UI State
                 isGenerating = false;
                 userInput.disabled = false;
                 sendBtn.disabled = false;
