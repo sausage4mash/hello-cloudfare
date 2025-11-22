@@ -1,11 +1,36 @@
 <!DOCTYPE html>
-<html lang="en">
+<html>
 <head>
-  <meta charset="UTF-8" />
-  <title>Hello Cloudflare</title>
+  <meta charset="UTF-8">
+  <title>Gemini Worker Test</title>
 </head>
 <body>
-  <h1>Hello from Cloudflare 👋</h1>
-  <p>If you can see this, it worked.</p>
+
+<h2>Test Gemini via Cloudflare Worker</h2>
+
+<textarea id="prompt" rows="4" cols="60">Say hello and a fun fact</textarea>
+<br><br>
+
+<button onclick="askGemini()">Test Worker</button>
+
+<pre id="output">Waiting...</pre>
+
+<script>
+async function askGemini() {
+  const prompt = document.getElementById("prompt").value;
+
+  const response = await fetch("https://solitary-art-922c.robertjohncollins.workers.dev", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ prompt })
+  });
+
+  const data = await response.json();
+  document.getElementById("output").textContent =
+    JSON.stringify(data, null, 2);
+}
+</script>
+
 </body>
 </html>
+
